@@ -17,9 +17,7 @@ from .utils import (parse_cities, parse_dates, parse_needed, parse_countries, pa
 from .geo_tools import get_coordinates
 
 import os
-import logging
 
-import time
 
 
 def _parse_args():
@@ -43,7 +41,6 @@ def main():
 
     os.makedirs(args.output, exist_ok=True)
 
-    tree: lxml.etree._Element = None
     with open("E-vet 2021 LYVS templete.html") as f:
         tree = lxml.etree.HTML(f.read())
 
