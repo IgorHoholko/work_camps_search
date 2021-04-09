@@ -1,0 +1,50 @@
+<html>
+    <head>
+        <style>
+            tag {
+              font-family: Consolas,"courier new";
+              color: white;
+              background-color: #4DA8DA;
+              padding: 4px;
+              border-radius: 3px;
+              font-size: 105%;
+            }
+        </style>
+    </head>
+    <body>
+        <b>Name:</b> {{name}}<br>
+
+        <b>Dates:</b> {{date_from}} - {{date_to}}<br>
+
+        <b>Need Male:</b> {{males}}<br>
+        <b>Need Female:</b> {{females}} <br>
+        <b>Need Total:</b> {{total}} <br>
+
+        <b>Accomodation and Food</b><br>
+        {{accomod}}<br>
+
+        <b>Location & Activities</b><br>
+        {{location}}<br>
+
+        <b>Work</b><br>
+        {{work}}<br>
+
+        <b>Requirements</b><br>
+        {{requirements}}<br>
+
+        <b>Code:</b> {{code}}<br>
+        <b>Link:</b> <a href="{{link}}">project page</a> <br>
+
+         {% if any_tags == true %}
+            <br>
+            <b>Tags:</b>
+
+            {% for tag in tags %}
+             <tag>#{{tag}}</tag>
+            {% endfor %}
+
+        {% endif %}
+
+    </body>
+</html>
+
