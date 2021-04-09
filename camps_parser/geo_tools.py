@@ -11,7 +11,7 @@ from tqdm import tqdm
 from geotext import GeoText
 from geopy.geocoders import Nominatim
 
-def get_coordinates(countries: List[str], cities: List[str],
+def getCoordinates(countries: List[str], cities: List[str],
                     advanced_search = False, descriptions_dicts: List[dict] = None) \
     -> Tuple[List[str], List[float], List[float]]:
 
