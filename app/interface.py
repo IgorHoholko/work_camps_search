@@ -9,32 +9,42 @@
 
 
 from PyQt5 import QtCore, QtGui, QtWidgets
-from PyQt5.QtWidgets import QApplication, QWidget, QHBoxLayout, QVBoxLayout, QPushButton, QMainWindow
 from PyQt5.QtWebEngineWidgets import QWebEngineView
-from collections import defaultdict
-from folium.plugins import MarkerCluster
-import folium
 import io
-
-m = folium.Map(location=[50.2577,14.9939], tiles = 'Stamen Terrain')
-
-
-
+import sys
+from typing import Tuple, List, Union
+from folium.plugins import MarkerCluster
+from folium.map import Marker
+import folium
+import pandas as pd
+from .analytics.tools import Analytics
 
 class Ui_MainWindow(object):
 
-    def resetMap(self, markers=[], clusters=[]):
-        m = folium.Map(location=[50.2577, 14.9939], tiles='Stamen Terrain', zoom_start = 5)
+    def resetMap(self, markers: List[Union[Marker, MarkerCluster]]=None):
+        markers = markers if markers is not None else []
+        map = folium.Map(location=[50.2577, 14.9939], tiles='Stamen Terrain', zoom_start = 5)
+        print(len(markers))
+        for i, marker in enumerate(markers):
+            marker.add_to(map)
+            if i == 60:
+                break
         data = io.BytesIO()
-        m.save(data, close_file=False)
+        map.save(data, close_file=False)
+
         self.map_layer.setHtml(data.getvalue().decode())
+
+
         data.close()
 
-    def __init__(self, MainWindow):
+    def __init__(self, MainWindow, data: pd.DataFrame = None):
         self._translate = QtCore.QCoreApplication.translate
 
+        self.data = data
+
         self.setupUi(MainWindow)
-        self.resetMap()
+        markers = Analytics.getMarkers(data)
+        self.resetMap(markers)
         self.setupFunctional()
         
     def setupUi(self, MainWindow):
@@ -122,6 +132,7 @@ class Ui_MainWindow(object):
 
         self.date_from = QtWidgets.QDateEdit(self.settings_layer)
         self.date_from.setObjectName("date_from")
+        self.date_from.setDate(QtCore.QDate(2020,1,1))
         self.gridLayout_settings_layer.addWidget(self.date_from, 4, 0, 1, 1)
 
         self.label_settings_timeTo = QtWidgets.QLabel(self.settings_layer)
@@ -136,6 +147,7 @@ class Ui_MainWindow(object):
         
         self.date_to = QtWidgets.QDateEdit(self.settings_layer)
         self.date_to.setObjectName("date_to")
+        self.date_to.setDate(QtCore.QDate(2022, 1, 1))
         self.gridLayout_settings_layer.addWidget(self.date_to, 6, 0, 1, 1)
         
         self.pushButton_settings_apply = QtWidgets.QPushButton(self.settings_layer)
@@ -246,16 +258,33 @@ class Ui_MainWindow(object):
     def setupFunctional(self):
         self.pushButton_settings_close.clicked.connect(lambda : self._change_state_map_tab_settings(close=True))
         self.actionFilter.triggered.connect(self._change_state_map_tab_settings)
+
+        self.pushButton_settings_apply.clicked.connect(self._apply_settings)
+
+    def _apply_settings(self):
+        key_words_content = self.plainTextEdit_settings_keyWords.toPlainText()
+        key_words = key_words_content.split('|')
+        key_words = [w.strip() for w in key_words]
+        date_from = self.date_from.date().toString('dd-MM-yyyy')
+        date_to = self.date_from.date().toString('dd-MM-yyyy')
+
+        df = Analytics.selectByTime(self.data, date_from, date_to)
+        df , keywords_list_found = Analytics.selectByKeywords(df, key_words)
+
+        markers = Analytics.getMarkers(df, keywords_list_found)
+        self.resetMap(markers)
+
+
     
     def _change_state_map_tab_settings(self, close: bool):
         idx = 1 if close else 0
         self.stackedWidget_map_tab.setCurrentIndex(idx)
 
 if __name__ == "__main__":
-    import sys
+    df = pd.read_csv("data/new_data.csv")
     app = QtWidgets.QApplication(sys.argv)
     MainWindow = QtWidgets.QMainWindow()
-    ui = Ui_MainWindow(MainWindow)
+    ui = Ui_MainWindow(MainWindow, df)
 
     MainWindow.show()
     sys.exit(app.exec_())
