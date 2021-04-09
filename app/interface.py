@@ -27,7 +27,7 @@ class Ui_MainWindow(object):
         print(len(markers))
         for i, marker in enumerate(markers):
             marker.add_to(map)
-            if i == 60:
+            if i == 200:
                 break
         data = io.BytesIO()
         map.save(data, close_file=False)
@@ -83,27 +83,19 @@ class Ui_MainWindow(object):
         self.map_layer.setObjectName("map_layer")
         self.gridLayout_map_layer = QtWidgets.QGridLayout(self.map_layer)
         self.gridLayout_map_layer.setObjectName("gridLayout_map_layer")
+        self.gridLayout_map_tab.addWidget(self.map_layer)
+
 
 
         # Filter Layer (Map Tab)
-        self.settings_layer = QtWidgets.QWidget()
+        self.settings_layer = QtWidgets.QWidget(self.map_tab)
         self.settings_layer.setStyleSheet("")
+        self.settings_layer.setGeometry(0, 0, 350, 350)
+        self.settings_layer.setStyleSheet("background-color: rgb(255, 255, 255);")
         self.settings_layer.setObjectName("settings_layer")
         self.gridLayout_settings_layer = QtWidgets.QGridLayout(self.settings_layer)
         self.gridLayout_settings_layer.setObjectName("gridLayout_settings_layer")
 
-        self.pushButton_settings_close = QtWidgets.QPushButton(self.settings_layer)
-        font = QtGui.QFont()
-        font.setPointSize(9)
-        font.setBold(True)
-        font.setWeight(75)
-        self.pushButton_settings_close.setFont(font)
-        self.pushButton_settings_close.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
-        self.pushButton_settings_close.setStyleSheet("background-color: rgb(85, 85, 85);\ncolor: rgb(255, 255, 255);")
-        self.pushButton_settings_close.setObjectName("pushButton_settings_close")
-        self.pushButton_settings_close.setText(self._translate("MainWindow", "Close"))
-        self.gridLayout_settings_layer.addWidget(self.pushButton_settings_close, 0, 0, 1, 1, QtCore.Qt.AlignRight)
-        
         self.settings_label_keyWords = QtWidgets.QLabel(self.settings_layer)
         font = QtGui.QFont()
         font.setPointSize(10)
@@ -112,6 +104,8 @@ class Ui_MainWindow(object):
         self.settings_label_keyWords.setFont(font)
         self.settings_label_keyWords.setObjectName("settings_label_keyWords")
         self.settings_label_keyWords.setText(self._translate("MainWindow", "Key Words"))
+        empty_space = QtWidgets.QLabel(self.settings_layer)
+        self.gridLayout_settings_layer.addWidget(empty_space, 0, 0, 1, 1)
         self.gridLayout_settings_layer.addWidget(self.settings_label_keyWords, 1, 0, 1, 1)
         
         
@@ -161,19 +155,22 @@ class Ui_MainWindow(object):
         self.pushButton_settings_apply.setObjectName("pushButton_settings_apply")
         self.pushButton_settings_apply.setText(self._translate("MainWindow", "Apply"))
         self.gridLayout_settings_layer.addWidget(self.pushButton_settings_apply, 7, 0, 1, 1)
-        
-        
-        # Create Stacked Widget on Map Tab (for Map and Filter Layer)
-        self.stackedWidget_map_tab = QtWidgets.QStackedWidget(self.map_tab)
-        font = QtGui.QFont()
-        font.setPointSize(7)
-        self.stackedWidget_map_tab.setFont(font)
-        self.stackedWidget_map_tab.setObjectName("stackedWidget_map_tab")
-        # Add Layers (Map, Filter) to Stacked  Widget
-        self.stackedWidget_map_tab.addWidget(self.settings_layer)
-        self.stackedWidget_map_tab.addWidget(self.map_layer)
 
-        self.gridLayout_map_tab.addWidget(self.stackedWidget_map_tab, 0, 0, 1, 1)
+        self.pushButton_settings_change_status = QtWidgets.QPushButton(self.map_tab)
+        self.pushButton_settings_change_status.setGeometry(156, 11, 200, 30)
+        font = QtGui.QFont()
+        font.setPointSize(9)
+        font.setBold(True)
+        font.setWeight(75)
+        self.pushButton_settings_change_status.setFont(font)
+        self.pushButton_settings_change_status.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        self.pushButton_settings_change_status.setStyleSheet(
+            "padding:0.3em 1.2em; margin:0 0.3em 0.3em 0; border-radius:10em; color:#FFFFFF; background-color:#4eb5f1")
+        self.pushButton_settings_change_status.setObjectName("pushButton_settings_change_status")
+        self.pushButton_settings_change_status.setText(self._translate("MainWindow", "Filter"))
+
+        # self.settings_layer.show()
+
         
         
         ### Projects Tab ###
@@ -225,7 +222,6 @@ class Ui_MainWindow(object):
 
         self.retranslateUi(MainWindow)
         self.tab_widget.setCurrentIndex(0)
-        self.stackedWidget_map_tab.setCurrentIndex(1)
         QtCore.QMetaObject.connectSlotsByName(MainWindow)
 
     def retranslateUi(self, MainWindow):
@@ -256,7 +252,7 @@ class Ui_MainWindow(object):
         self.actionFilter.setText(self._translate("MainWindow", "Open Filter"))
 
     def setupFunctional(self):
-        self.pushButton_settings_close.clicked.connect(lambda : self._change_state_map_tab_settings(close=True))
+        self.pushButton_settings_change_status.clicked.connect(self._change_state_map_tab_settings)
         self.actionFilter.triggered.connect(self._change_state_map_tab_settings)
 
         self.pushButton_settings_apply.clicked.connect(self._apply_settings)
@@ -266,22 +262,33 @@ class Ui_MainWindow(object):
         key_words = key_words_content.split('|')
         key_words = [w.strip() for w in key_words]
         date_from = self.date_from.date().toString('dd-MM-yyyy')
-        date_to = self.date_from.date().toString('dd-MM-yyyy')
+        date_to = self.date_to.date().toString('dd-MM-yyyy')
 
         df = Analytics.selectByTime(self.data, date_from, date_to)
-        df , keywords_list_found = Analytics.selectByKeywords(df, key_words)
+        if df.shape[0]:
+            if any([len(word) for word in key_words]):
+                df , keywords_list_found = Analytics.selectByKeywords(df, key_words)
+            else:
+                keywords_list_found = []
+            markers = Analytics.getMarkers(df, keywords_list_found)
+        else:
+            markers = []
 
-        markers = Analytics.getMarkers(df, keywords_list_found)
+        self._change_state_map_tab_settings()
         self.resetMap(markers)
 
 
-    
-    def _change_state_map_tab_settings(self, close: bool):
-        idx = 1 if close else 0
-        self.stackedWidget_map_tab.setCurrentIndex(idx)
+    def _change_state_map_tab_settings(self):
+        self.settings_layer.setHidden( not self.settings_layer.isHidden() )
+
+        # if self.settings_layer.setDisabled(True)
+
 
 if __name__ == "__main__":
     df = pd.read_csv("data/new_data.csv")
+    df['DateStart'] = pd.to_datetime(df['DateStart'], dayfirst=True)
+    df['DateEnd'] = pd.to_datetime(df['DateEnd'], dayfirst=True)
+
     app = QtWidgets.QApplication(sys.argv)
     MainWindow = QtWidgets.QMainWindow()
     ui = Ui_MainWindow(MainWindow, df)

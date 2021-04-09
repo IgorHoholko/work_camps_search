@@ -41,13 +41,15 @@ class Analytics:
     @staticmethod
     def getMarkers(df: pd.DataFrame, list_keywords: List[List[str]] = None) -> List[Union[Marker, MarkerCluster]]:
         list_keywords = list_keywords if list_keywords is not None else []
-        df_ = df.dropna(subset=['Latitude'])
+        # df_ = df.dropna(subset=['Latitude'])
 
         markers_dict = defaultdict(list)
-        for i, row in df_.iterrows():
+        for j, (i, row) in enumerate(df.iterrows()):
             latitude, lognitude = row['Latitude'], row["Lognitude"]
+            if not pd.notna(latitude):
+                continue
             marker_carcase = {"location" :[latitude, lognitude],
-                               "popup" : createPopup(row, list_keywords[i]) if len(list_keywords) else createPopup(row, []),
+                               "popup" : createPopup(row, list_keywords[j]) if len(list_keywords) else createPopup(row, []),
                                "icon" : folium.Icon(icon="info", prefix='fa')}
             markers_dict[(latitude, lognitude)].append(marker_carcase)
 

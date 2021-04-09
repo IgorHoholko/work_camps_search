@@ -23,10 +23,11 @@ def findKeyWords(text: str, keywords: List[str]) -> List[str]:
     return keywords_found
 
 
-def createPopup(df_row, tags_list: List[str]) -> folium.Popup:
+def createPopup(df_row, tags: List[str]) -> folium.Popup:
     """ Get pandas row and transform it to folium Popup"""
 
-    tags = [[tag.lower() for tag in tags] for tags in tags_list]
+    tags = [tag.lower() for tag in tags]
+    tags = set(tags)
 
     html = open('app/templates/popup.html').read()
     template = Template(html)
