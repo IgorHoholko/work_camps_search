@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+   <head>
+      <title>Bootstrap Example</title>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1">
+      <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/css/bootstrap.min.css">
+      <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+      <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/js/bootstrap.min.js"></script>
+       <style>
+           tag {
+              font-family: Consolas,"courier new";
+              color: white;
+              background-color: #4DA8DA;
+              padding: 4px;
+              margin: 3px;
+              border-radius: 3px;
+              font-size: 105%;
+            }
+       </style>
+   </head>
+   <body>
+      <div style="overflow: auto; width: 100%">
+         <table class="table table-hover table-fixed table-striped table-hover" style="width: 100%">
+            <thead>
+               <tr>
+                  <th style="width: 100px">Code</th>
+                  <th style="width: 100px">Country</th>
+                  <th style="max-width: 50px">City</th>
+                  <th style="width: 100px">Project Name</th>
+                  <th style="min-width: 100px">Start Date</th>
+                  <th style="min-width: 100px">End Date</th>
+                  <th style="width: 100px">Need Male / Female</th>
+                  <th style="width: 100px">Need Total</th>
+                  {% if any_tags == true %}
+                  <th style="width: 100px">Key Words</th>
+                  {% endif %}
+                  <th style="width: 100px">Link</th>
+                  <th style="min-width: 300px">Description</th>
+               </tr>
+            </thead>
+            <tbody>
+               {% for info_dict in info_dicts %}
+               <tr >
+                  <th >{{info_dict['Code']}}</th>
+                  <th >{{info_dict['Country']}}</th>
+                  <th >{{info_dict['City']}}</th>
+                  <th >{{info_dict['Name']}}</th>
+                  <th>{{info_dict['DateStart']}}</th>
+                  <th >{{info_dict['DateEnd']}}</th>
+                  <th >{{info_dict['NeedMale']}} / {{info_dict['NeedFemale']}}</th>
+                  <th >{{info_dict['NeedTotal']}}</th>
+                  {% if any_tags == true %}
+                  <th >
+                     {% for tag in info_dict['tags'] %}
+                     <tag>#{{tag}}</tag>
+                     {% endfor %}
+                  </th>
+                  {% endif %}
+                  <th ><a href="{{info_dict['URL']}}">project page</a></th>
+                  <th >
+                     <details>
+                        <summary style="cursor: pointer">Accomodation and Food</summary>
+                        <p style="font-size: 13px; font-weight: lighter ">
+                           {{info_dict['ACCOMODATION AND FOOD']}}
+                        </p>
+                     </details>
+                     <details>
+                        <summary style="cursor: pointer">Location & Activities</summary>
+                        <p style="font-size: 13px; font-weight: lighter">
+                           {{info_dict['LOCATION & LEISURE ACTIVITY']}}
+                        </p>
+                     </details>
+                     <details>
+                        <summary style="cursor: pointer">Work</summary>
+                        <p style="font-size: 13px; font-weight: lighter">
+                           {{info_dict['WORK']}}
+                        </p>
+                     </details>
+                     <details>
+                        <summary style="cursor: pointer">Requirements</summary>
+                        <p style="font-size: 13px; font-weight: lighter">
+                           {{info_dict['REQUIREMENTS']}}
+                        </p>
+                     </details>
+                  </th>
+               </tr>
+               {% endfor %}
+            </tbody>
+         </table>
+      </div>
+   </body>
+</html>
