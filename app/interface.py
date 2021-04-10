@@ -10,32 +10,24 @@
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtWebEngineWidgets import QWebEngineView
+from PyQt5.QtWidgets import QFileDialog
 import io
 import sys
+import os
+import shutil
+
 from typing import Tuple, List, Union
 from folium.plugins import MarkerCluster
 from folium.map import Marker
 import folium
 import pandas as pd
 from .analytics.tools import Analytics
+from .analytics.util import renderProjectsPageHTML
+
+TEMP_PATH = os.path.join(os.path.dirname(__file__), "TEMP")
+os.makedirs(TEMP_PATH, exist_ok=True)
 
 class Ui_MainWindow(object):
-
-    def resetMap(self, markers: List[Union[Marker, MarkerCluster]]=None):
-        markers = markers if markers is not None else []
-        map = folium.Map(location=[50.2577, 14.9939], tiles='Stamen Terrain', zoom_start = 5)
-        print(len(markers))
-        for i, marker in enumerate(markers):
-            marker.add_to(map)
-            if i == 200:
-                break
-        data = io.BytesIO()
-        map.save(data, close_file=False)
-
-        self.map_layer.setHtml(data.getvalue().decode())
-
-
-        data.close()
 
     def __init__(self, MainWindow, data: pd.DataFrame = None):
         self._translate = QtCore.QCoreApplication.translate
@@ -45,10 +37,12 @@ class Ui_MainWindow(object):
         self.setupUi(MainWindow)
         markers = Analytics.getMarkers(data)
         self.resetMap(markers)
+        self.resetProjectsPage(data, None)
         self.setupFunctional()
         
     def setupUi(self, MainWindow):
         MainWindow.setObjectName("MainWindow")
+        MainWindow.setWindowIcon(QtGui.QIcon('resources/icon.png'))
         MainWindow.resize(1400, 800)
 
 
@@ -88,88 +82,89 @@ class Ui_MainWindow(object):
 
 
         # Filter Layer (Map Tab)
-        self.settings_layer = QtWidgets.QWidget(self.map_tab)
-        self.settings_layer.setStyleSheet("")
-        self.settings_layer.setGeometry(0, 0, 350, 350)
-        self.settings_layer.setStyleSheet("background-color: rgb(255, 255, 255);")
-        self.settings_layer.setObjectName("settings_layer")
-        self.gridLayout_settings_layer = QtWidgets.QGridLayout(self.settings_layer)
-        self.gridLayout_settings_layer.setObjectName("gridLayout_settings_layer")
+        self.filter_layer = QtWidgets.QWidget(self.map_tab)
+        self.filter_layer.setStyleSheet("")
+        self.filter_layer.setGeometry(0, 0, 350, 350)
+        self.filter_layer.setStyleSheet("background-color: rgb(255, 255, 255);")
+        self.filter_layer.setObjectName("filter_layer")
+        self.filter_layer.setHidden(True)
+        self.gridLayout_filter_layer = QtWidgets.QGridLayout(self.filter_layer)
+        self.gridLayout_filter_layer.setObjectName("gridLayout_filter_layer")
 
-        self.settings_label_keyWords = QtWidgets.QLabel(self.settings_layer)
+        self.filter_label_keyWords = QtWidgets.QLabel(self.filter_layer)
         font = QtGui.QFont()
         font.setPointSize(10)
         font.setBold(True)
         font.setWeight(75)
-        self.settings_label_keyWords.setFont(font)
-        self.settings_label_keyWords.setObjectName("settings_label_keyWords")
-        self.settings_label_keyWords.setText(self._translate("MainWindow", "Key Words"))
-        empty_space = QtWidgets.QLabel(self.settings_layer)
-        self.gridLayout_settings_layer.addWidget(empty_space, 0, 0, 1, 1)
-        self.gridLayout_settings_layer.addWidget(self.settings_label_keyWords, 1, 0, 1, 1)
+        self.filter_label_keyWords.setFont(font)
+        self.filter_label_keyWords.setObjectName("filter_label_keyWords")
+        self.filter_label_keyWords.setText(self._translate("MainWindow", "Key Words"))
+        empty_space = QtWidgets.QLabel(self.filter_layer)
+        self.gridLayout_filter_layer.addWidget(empty_space, 0, 0, 1, 1)
+        self.gridLayout_filter_layer.addWidget(self.filter_label_keyWords, 1, 0, 1, 1)
         
         
-        self.plainTextEdit_settings_keyWords = QtWidgets.QPlainTextEdit(self.settings_layer)
-        self.plainTextEdit_settings_keyWords.setStyleSheet("font: 10pt \"JetBrains Mono\";")
-        self.plainTextEdit_settings_keyWords.setObjectName("plainTextEdit_settings_keyWords")
-        self.gridLayout_settings_layer.addWidget(self.plainTextEdit_settings_keyWords, 2, 0, 1, 1)
+        self.plainTextEdit_filter_keyWords = QtWidgets.QPlainTextEdit(self.filter_layer)
+        self.plainTextEdit_filter_keyWords.setStyleSheet("font: 10pt \"JetBrains Mono\";")
+        self.plainTextEdit_filter_keyWords.setObjectName("plainTextEdit_filter_keyWords")
+        self.gridLayout_filter_layer.addWidget(self.plainTextEdit_filter_keyWords, 2, 0, 1, 1)
         
-        self.label_settings_timeFrom = QtWidgets.QLabel(self.settings_layer)
+        self.label_filter_timeFrom = QtWidgets.QLabel(self.filter_layer)
         font = QtGui.QFont()
         font.setPointSize(10)
         font.setBold(True)
         font.setWeight(75)
-        self.label_settings_timeFrom.setFont(font)
-        self.label_settings_timeFrom.setObjectName("label_settings_timeFrom")
-        self.label_settings_timeFrom.setText(self._translate("MainWindow", "Time From:"))
-        self.gridLayout_settings_layer.addWidget(self.label_settings_timeFrom, 3, 0, 1, 1)
+        self.label_filter_timeFrom.setFont(font)
+        self.label_filter_timeFrom.setObjectName("label_filter_timeFrom")
+        self.label_filter_timeFrom.setText(self._translate("MainWindow", "Time From:"))
+        self.gridLayout_filter_layer.addWidget(self.label_filter_timeFrom, 3, 0, 1, 1)
 
-        self.date_from = QtWidgets.QDateEdit(self.settings_layer)
+        self.date_from = QtWidgets.QDateEdit(self.filter_layer)
         self.date_from.setObjectName("date_from")
         self.date_from.setDate(QtCore.QDate(2020,1,1))
-        self.gridLayout_settings_layer.addWidget(self.date_from, 4, 0, 1, 1)
+        self.gridLayout_filter_layer.addWidget(self.date_from, 4, 0, 1, 1)
 
-        self.label_settings_timeTo = QtWidgets.QLabel(self.settings_layer)
+        self.label_filter_timeTo = QtWidgets.QLabel(self.filter_layer)
         font = QtGui.QFont()
         font.setPointSize(10)
         font.setBold(True)
         font.setWeight(75)
-        self.label_settings_timeTo.setFont(font)
-        self.label_settings_timeTo.setObjectName("label_settings_timeTo")
-        self.label_settings_timeTo.setText(self._translate("MainWindow", "Time To"))
-        self.gridLayout_settings_layer.addWidget(self.label_settings_timeTo, 5, 0, 1, 1)
+        self.label_filter_timeTo.setFont(font)
+        self.label_filter_timeTo.setObjectName("label_filter_timeTo")
+        self.label_filter_timeTo.setText(self._translate("MainWindow", "Time To"))
+        self.gridLayout_filter_layer.addWidget(self.label_filter_timeTo, 5, 0, 1, 1)
         
-        self.date_to = QtWidgets.QDateEdit(self.settings_layer)
+        self.date_to = QtWidgets.QDateEdit(self.filter_layer)
         self.date_to.setObjectName("date_to")
         self.date_to.setDate(QtCore.QDate(2022, 1, 1))
-        self.gridLayout_settings_layer.addWidget(self.date_to, 6, 0, 1, 1)
+        self.gridLayout_filter_layer.addWidget(self.date_to, 6, 0, 1, 1)
         
-        self.pushButton_settings_apply = QtWidgets.QPushButton(self.settings_layer)
+        self.pushButton_filter_apply = QtWidgets.QPushButton(self.filter_layer)
         font = QtGui.QFont()
         font.setPointSize(10)
         font.setBold(False)
         font.setWeight(50)
-        self.pushButton_settings_apply.setFont(font)
-        self.pushButton_settings_apply.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
-        self.pushButton_settings_apply.setStyleSheet("background-color: rgb(76, 175, 80);\ncolor: rgb(255, 255, 255);")
-        self.pushButton_settings_apply.setObjectName("pushButton_settings_apply")
-        self.pushButton_settings_apply.setText(self._translate("MainWindow", "Apply"))
-        self.gridLayout_settings_layer.addWidget(self.pushButton_settings_apply, 7, 0, 1, 1)
+        self.pushButton_filter_apply.setFont(font)
+        self.pushButton_filter_apply.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        self.pushButton_filter_apply.setStyleSheet("background-color: rgb(76, 175, 80);\ncolor: rgb(255, 255, 255);")
+        self.pushButton_filter_apply.setObjectName("pushButton_filter_apply")
+        self.pushButton_filter_apply.setText(self._translate("MainWindow", "Apply"))
+        self.gridLayout_filter_layer.addWidget(self.pushButton_filter_apply, 7, 0, 1, 1)
 
-        self.pushButton_settings_change_status = QtWidgets.QPushButton(self.map_tab)
-        self.pushButton_settings_change_status.setGeometry(156, 11, 200, 30)
+        self.pushButton_filter_change_status = QtWidgets.QPushButton(self.map_tab)
+        self.pushButton_filter_change_status.setGeometry(156, 11, 200, 30)
         font = QtGui.QFont()
         font.setPointSize(9)
         font.setBold(True)
         font.setWeight(75)
-        self.pushButton_settings_change_status.setFont(font)
-        self.pushButton_settings_change_status.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
-        self.pushButton_settings_change_status.setStyleSheet(
+        self.pushButton_filter_change_status.setFont(font)
+        self.pushButton_filter_change_status.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        self.pushButton_filter_change_status.setStyleSheet(
             "padding:0.3em 1.2em; margin:0 0.3em 0.3em 0; border-radius:10em; color:#FFFFFF; background-color:#4eb5f1")
-        self.pushButton_settings_change_status.setObjectName("pushButton_settings_change_status")
-        self.pushButton_settings_change_status.setText(self._translate("MainWindow", "Filter"))
+        self.pushButton_filter_change_status.setObjectName("pushButton_filter_change_status")
+        self.pushButton_filter_change_status.setText(self._translate("MainWindow", "Filter"))
 
-        # self.settings_layer.show()
+        # self.filter_layer.show()
 
         
         
@@ -191,9 +186,8 @@ class Ui_MainWindow(object):
         self.pushButton_current_projects_save.setText(self._translate("MainWindow", "Save Current List"))
         self.gridLayout_progects_tab.addWidget(self.pushButton_current_projects_save, 0, 0, 1, 1)
 
-        self.projects_table = QtWidgets.QTreeWidget(self.projects_tab)
+        self.projects_table = QWebEngineView(self.projects_tab)#QtWidgets.QTreeWidget(self.projects_tab)
         self.projects_table.setObjectName("projects_table")
-        item_0 = QtWidgets.QTreeWidgetItem(self.projects_table)
         self.gridLayout_progects_tab.addWidget(self.projects_table, 1, 0, 1, 1)
 
         # Add both tabs (Map, Projects) to Tabs Widget
@@ -225,25 +219,7 @@ class Ui_MainWindow(object):
         QtCore.QMetaObject.connectSlotsByName(MainWindow)
 
     def retranslateUi(self, MainWindow):
-        MainWindow.setWindowTitle(self._translate("MainWindow", "WorkCapms Helper"))
-
-
-        # Projects Table
-        self.projects_table.headerItem().setText(0, self._translate("MainWindow", "Code"))
-        self.projects_table.headerItem().setText(1, self._translate("MainWindow", "Name"))
-        self.projects_table.headerItem().setText(2, self._translate("MainWindow", "Date"))
-        self.projects_table.headerItem().setText(3, self._translate("MainWindow", "Country"))
-        self.projects_table.headerItem().setText(4, self._translate("MainWindow", "Keywords"))
-        self.projects_table.headerItem().setText(5, self._translate("MainWindow", "Link"))
-        __sortingEnabled = self.projects_table.isSortingEnabled()
-        self.projects_table.setSortingEnabled(False)
-        self.projects_table.topLevelItem(0).setText(0, self._translate("MainWindow", "J78"))
-        self.projects_table.topLevelItem(0).setText(1, self._translate("MainWindow", "Young"))
-        self.projects_table.topLevelItem(0).setText(2, self._translate("MainWindow", "10.10.10-20.20.20"))
-        self.projects_table.topLevelItem(0).setText(3, self._translate("MainWindow", "France"))
-        self.projects_table.topLevelItem(0).setText(4, self._translate("MainWindow", "#Tents"))
-        self.projects_table.topLevelItem(0).setText(5, self._translate("MainWindow", "www.yandex.ru"))
-        self.projects_table.setSortingEnabled(__sortingEnabled)
+        MainWindow.setWindowTitle(self._translate("MainWindow", "WorkCapms Companion"))
         
         self.tab_widget.setTabText(self.tab_widget.indexOf(self.map_tab), self._translate("MainWindow", "Map"))
         self.tab_widget.setTabText(self.tab_widget.indexOf(self.projects_tab), self._translate("MainWindow", "Projects List"))
@@ -252,13 +228,24 @@ class Ui_MainWindow(object):
         self.actionFilter.setText(self._translate("MainWindow", "Open Filter"))
 
     def setupFunctional(self):
-        self.pushButton_settings_change_status.clicked.connect(self._change_state_map_tab_settings)
-        self.actionFilter.triggered.connect(self._change_state_map_tab_settings)
+        self.pushButton_filter_change_status.clicked.connect(self._changeStateMapTabFilter)
+        self.actionFilter.triggered.connect(self._changeStateMapTabFilter)
 
-        self.pushButton_settings_apply.clicked.connect(self._apply_settings)
+        self.pushButton_filter_apply.clicked.connect(self._onApplyFilter)
 
-    def _apply_settings(self):
-        key_words_content = self.plainTextEdit_settings_keyWords.toPlainText()
+        self.pushButton_current_projects_save.clicked.connect(self._saveProjectsList)
+
+    def _saveProjectsList(self):
+        path_save, _ = QFileDialog.getSaveFileName(None, caption="Save Projects List",
+                                                filter=" (*.html);;All Files (*)")
+        try:
+            shutil.copy(self.cache_last_saved_projects_page_path, path_save)
+        except:
+            pass
+
+
+    def _onApplyFilter(self):
+        key_words_content = self.plainTextEdit_filter_keyWords.toPlainText()
         key_words = key_words_content.split('|')
         key_words = [w.strip() for w in key_words]
         date_from = self.date_from.date().toString('dd-MM-yyyy')
@@ -269,19 +256,45 @@ class Ui_MainWindow(object):
             if any([len(word) for word in key_words]):
                 df , keywords_list_found = Analytics.selectByKeywords(df, key_words)
             else:
-                keywords_list_found = []
+                keywords_list_found = None
             markers = Analytics.getMarkers(df, keywords_list_found)
+            self.resetProjectsPage(df, keywords_list_found)
         else:
             markers = []
 
-        self._change_state_map_tab_settings()
+        self._changeStateMapTabFilter()
         self.resetMap(markers)
 
 
-    def _change_state_map_tab_settings(self):
-        self.settings_layer.setHidden( not self.settings_layer.isHidden() )
+    def _changeStateMapTabFilter(self):
+        self.filter_layer.setHidden( not self.filter_layer.isHidden() )
+    
+    def resetMap(self, markers: List[Union[Marker, MarkerCluster]]=None):
+        markers = markers if markers is not None else []
+        map = folium.Map(location=[50.2577, 14.9939], tiles='Stamen Terrain', zoom_start = 5)
+        print(len(markers))
+        for i, marker in enumerate(markers):
+            marker.add_to(map)
 
-        # if self.settings_layer.setDisabled(True)
+        data = io.BytesIO()
+        map.save(data, close_file=False)
+        path = os.path.join(TEMP_PATH, "map.html")
+        with open(path, 'w', encoding='utf8') as f:
+            f.write(data.getvalue().decode())
+
+        self.map_layer.load(QtCore.QUrl.fromLocalFile(path))
+
+        data.close()
+        
+    def resetProjectsPage(self, df: pd.DataFrame, keywords_list: List[List[str]] = None):
+        html = renderProjectsPageHTML(df, keywords_list)
+        path = os.path.join(TEMP_PATH, 'projects_page.html')
+        self.cache_last_saved_projects_page_path = path
+        with open(path, 'w', encoding='utf8') as f:
+            f.write(html)
+
+        self.projects_table.load(QtCore.QUrl.fromLocalFile(path))
+        # self.projects_table.setHtml(html)
 
 
 if __name__ == "__main__":
