@@ -9,7 +9,7 @@
 import pandas as pd
 from typing import Tuple, List, Union
 
-from .util import findKeyWords, createPopup
+from .util import findKeyWords, renderPopup
 from collections import defaultdict
 from folium.plugins import MarkerCluster
 from folium.map import Marker
@@ -39,18 +39,29 @@ class Analytics:
 
 
     @staticmethod
-    def getMarkers(df: pd.DataFrame, list_keywords: List[List[str]] = None) -> List[Union[Marker, MarkerCluster]]:
+    def getMarkers(df: pd.DataFrame, list_keywords: List[List[str]] = None, saved_cache: List[str] = None) \
+            -> List[Union[Marker, MarkerCluster]]:
         list_keywords = list_keywords if list_keywords is not None else []
+        saved_cache = saved_cache if saved_cache is not None else []
+
         # df_ = df.dropna(subset=['Latitude'])
 
         markers_dict = defaultdict(list)
         for j, (i, row) in enumerate(df.iterrows()):
+            if row['Code'] in saved_cache:
+                color = 'green'
+            else:
+                color = 'blue'
             latitude, lognitude = row['Latitude'], row["Lognitude"]
             if not pd.notna(latitude):
                 continue
+            if len(list_keywords):
+                popup = renderPopup(row, list_keywords[j], in_saved=(color=='green'))
+            else:
+                popup = renderPopup(row, in_saved=(color=='green'))
             marker_carcase = {"location" :[latitude, lognitude],
-                               "popup" : createPopup(row, list_keywords[j]) if len(list_keywords) else createPopup(row, []),
-                               "icon" : folium.Icon(icon="info", prefix='fa')}
+                               "popup" : popup,
+                               "icon" : folium.Icon(color=color, icon="info", prefix='fa')}
             markers_dict[(latitude, lognitude)].append(marker_carcase)
 
         markers = []
