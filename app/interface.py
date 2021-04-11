@@ -13,8 +13,10 @@ from PyQt5.QtWebEngineWidgets import QWebEngineView
 from PyQt5.QtWidgets import QFileDialog
 import io
 import sys
+import asyncio
 import os
 import shutil
+import lxml.etree
 
 from typing import Tuple, List, Union
 from folium.plugins import MarkerCluster
@@ -24,30 +26,43 @@ import pandas as pd
 from .analytics.tools import Analytics
 from .analytics.util import renderProjectsPageHTML
 
+from collections import Counter
+
 TEMP_PATH = os.path.join(os.path.dirname(__file__), "TEMP")
+CACHE_PATH = os.path.join(os.path.dirname(__file__), "_cache")
+
+CACHE_SAVED_PATH = os.path.join(CACHE_PATH, 'saved.txt')
+CACHE_VIEWD_PATH = os.path.join(CACHE_PATH, 'viewed.txt')
+
 os.makedirs(TEMP_PATH, exist_ok=True)
+os.makedirs(CACHE_PATH, exist_ok=True)
 
-class Ui_MainWindow(object):
 
-    def __init__(self, MainWindow, data: pd.DataFrame = None):
+
+class MainWindow(QtWidgets.QMainWindow):
+    toHtmlFinished = QtCore.pyqtSignal()
+
+    def __init__(self, data: pd.DataFrame = None):
+        super(MainWindow, self).__init__()
+
         self._translate = QtCore.QCoreApplication.translate
 
         self.data = data
 
-        self.setupUi(MainWindow)
-        markers = Analytics.getMarkers(data)
+        self.setupUi()
+        markers = Analytics.getMarkers(data, saved_cache=self.saved_codes)
         self.resetMap(markers)
         self.resetProjectsPage(data, None)
         self.setupFunctional()
         
-    def setupUi(self, MainWindow):
-        MainWindow.setObjectName("MainWindow")
-        MainWindow.setWindowIcon(QtGui.QIcon('resources/icon.png'))
-        MainWindow.resize(1400, 800)
+    def setupUi(self):
+        self.setObjectName("MainWindow")
+        self.setWindowIcon(QtGui.QIcon('resources/icon.png'))
+        self.resize(1400, 800)
 
 
         # Init Central Window
-        self.centralwidget = QtWidgets.QWidget(MainWindow)
+        self.centralwidget = QtWidgets.QWidget(self)
         self.centralwidget.setObjectName("centralwidget")
         self.gridLayout_central_vidget = QtWidgets.QGridLayout(self.centralwidget)
         self.gridLayout_central_vidget.setObjectName("gridLayout_central_vidget")
@@ -196,30 +211,30 @@ class Ui_MainWindow(object):
         
         self.gridLayout_central_vidget.addWidget(self.tab_widget, 0, 0, 1, 1)
 
-        MainWindow.setCentralWidget(self.centralwidget)
+        self.setCentralWidget(self.centralwidget)
 
 
         ### Menu
-        self.menubar = QtWidgets.QMenuBar(MainWindow)
+        self.menubar = QtWidgets.QMenuBar(self)
         self.menubar.setGeometry(QtCore.QRect(0, 0, 800, 26))
         self.menubar.setObjectName("menubar")
         self.menuFile = QtWidgets.QMenu(self.menubar)
         self.menuFile.setObjectName("menuFile")
-        MainWindow.setMenuBar(self.menubar)
-        self.statusbar = QtWidgets.QStatusBar(MainWindow)
+        self.setMenuBar(self.menubar)
+        self.statusbar = QtWidgets.QStatusBar(self)
         self.statusbar.setObjectName("statusbar")
-        MainWindow.setStatusBar(self.statusbar)
-        self.actionFilter = QtWidgets.QAction(MainWindow)
+        self.setStatusBar(self.statusbar)
+        self.actionFilter = QtWidgets.QAction(self)
         self.actionFilter.setObjectName("actionFilter")
         self.menuFile.addAction(self.actionFilter)
         self.menubar.addAction(self.menuFile.menuAction())
 
-        self.retranslateUi(MainWindow)
+        self.retranslateUi()
         self.tab_widget.setCurrentIndex(0)
-        QtCore.QMetaObject.connectSlotsByName(MainWindow)
+        QtCore.QMetaObject.connectSlotsByName(self)
 
-    def retranslateUi(self, MainWindow):
-        MainWindow.setWindowTitle(self._translate("MainWindow", "WorkCapms Companion"))
+    def retranslateUi(self):
+        self.setWindowTitle(self._translate("MainWindow", "WorkCapms Companion"))
         
         self.tab_widget.setTabText(self.tab_widget.indexOf(self.map_tab), self._translate("MainWindow", "Map"))
         self.tab_widget.setTabText(self.tab_widget.indexOf(self.projects_tab), self._translate("MainWindow", "Projects List"))
@@ -245,6 +260,8 @@ class Ui_MainWindow(object):
 
 
     def _onApplyFilter(self):
+        self.saveViewedToCache()
+
         key_words_content = self.plainTextEdit_filter_keyWords.toPlainText()
         key_words = key_words_content.split('|')
         key_words = [w.strip() for w in key_words]
@@ -257,7 +274,7 @@ class Ui_MainWindow(object):
                 df , keywords_list_found = Analytics.selectByKeywords(df, key_words)
             else:
                 keywords_list_found = None
-            markers = Analytics.getMarkers(df, keywords_list_found)
+            markers = Analytics.getMarkers(df, keywords_list_found, self.saved_codes)
             self.resetProjectsPage(df, keywords_list_found)
         else:
             markers = []
@@ -278,9 +295,13 @@ class Ui_MainWindow(object):
 
         data = io.BytesIO()
         map.save(data, close_file=False)
+
+        html = data.getvalue().decode()
+        html = html.replace('<body>', '<body>' + open('app/templates/map_cache_injection.html').read(), 1)
+
         path = os.path.join(TEMP_PATH, "map.html")
         with open(path, 'w', encoding='utf8') as f:
-            f.write(data.getvalue().decode())
+            f.write(html)
 
         self.map_layer.load(QtCore.QUrl.fromLocalFile(path))
 
@@ -294,7 +315,53 @@ class Ui_MainWindow(object):
             f.write(html)
 
         self.projects_table.load(QtCore.QUrl.fromLocalFile(path))
-        # self.projects_table.setHtml(html)
+
+
+    def saveCache(self):
+        current_page = self.map_layer.page()
+
+        # Parse Save Cache ### Async
+        current_page.runJavaScript('document.getElementById("history_save_projects").innerHTML', self.__store_html)
+        loop = QtCore.QEventLoop()
+        self.toHtmlFinished.connect(loop.quit)
+        loop.exec_()
+
+        current_saved = self.saved_codes
+        save_counter = Counter(
+            [*current_saved, *[code.strip() for code in self.__callback_output.split('/$/')]]
+        )
+        need_save = []
+        for code, count in save_counter.items():
+            if count % 2 != 0 and code != '': # One click - save. Two - unsave, ...
+                need_save.append(code)
+        with open(CACHE_SAVED_PATH, 'w') as f:
+            f.write("/$/".join(need_save))
+
+
+    def __store_html(self, html):
+        self.__callback_output = html
+        self.toHtmlFinished.emit()
+
+    @property
+    def saved_codes(self):
+        return open(CACHE_SAVED_PATH).read().split('/$/') if os.path.exists(CACHE_SAVED_PATH) else []
+
+
+    def closeEvent(self, event):
+        # Destructor
+        shutil.rmtree(TEMP_PATH, ignore_errors=True)
+        self.saveCache()
+        super(MainWindow, self).closeEvent(event)
+
+
+
+
+def start_app(data: pd.DataFrame):
+    app = QtWidgets.QApplication(sys.argv)
+    main_window = MainWindow(data)
+
+    main_window.show()
+    sys.exit(app.exec_())
 
 
 if __name__ == "__main__":
@@ -302,9 +369,5 @@ if __name__ == "__main__":
     df['DateStart'] = pd.to_datetime(df['DateStart'], dayfirst=True)
     df['DateEnd'] = pd.to_datetime(df['DateEnd'], dayfirst=True)
 
-    app = QtWidgets.QApplication(sys.argv)
-    MainWindow = QtWidgets.QMainWindow()
-    ui = Ui_MainWindow(MainWindow, df)
+    start_app(df)
 
-    MainWindow.show()
-    sys.exit(app.exec_())
