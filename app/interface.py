@@ -50,7 +50,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.data = data
 
         self.setupUi()
-        markers = Analytics.getMarkers(data, saved_cache=self.saved_codes)
+        markers = Analytics.getMarkers(data, saved_cache=self.saved_codes, viewed_codes=self.viewed_codes)
         self.resetMap(markers)
         self.resetProjectsPage(data, None)
         self.setupFunctional()
@@ -260,7 +260,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
 
     def _onApplyFilter(self):
-        self.saveViewedToCache()
+        self.saveCache()
 
         key_words_content = self.plainTextEdit_filter_keyWords.toPlainText()
         key_words = key_words_content.split('|')
@@ -274,7 +274,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 df , keywords_list_found = Analytics.selectByKeywords(df, key_words)
             else:
                 keywords_list_found = None
-            markers = Analytics.getMarkers(df, keywords_list_found, self.saved_codes)
+            markers = Analytics.getMarkers(df, keywords_list_found, self.saved_codes, self.viewed_codes)
             self.resetProjectsPage(df, keywords_list_found)
         else:
             markers = []
@@ -298,6 +298,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         html = data.getvalue().decode()
         html = html.replace('<body>', '<body>' + open('app/templates/map_cache_injection.html').read(), 1)
+
 
         path = os.path.join(TEMP_PATH, "map.html")
         with open(path, 'w', encoding='utf8') as f:
@@ -338,6 +339,18 @@ class MainWindow(QtWidgets.QMainWindow):
             f.write("/$/".join(need_save))
 
 
+        # Parse Viewed Cache ### Async
+        current_page.runJavaScript('document.getElementById("history_viewed_projects").innerHTML', self.__store_html)
+        loop = QtCore.QEventLoop()
+        self.toHtmlFinished.connect(loop.quit)
+        loop.exec_()
+
+        current_viewed = self.viewed_codes
+        viewed = {*current_viewed, *[code.strip() for code in self.__callback_output.split('/$/')]}
+        with open(CACHE_VIEWD_PATH, 'w') as f:
+            f.write("/$/".join(viewed))
+
+
     def __store_html(self, html):
         self.__callback_output = html
         self.toHtmlFinished.emit()
@@ -345,6 +358,9 @@ class MainWindow(QtWidgets.QMainWindow):
     @property
     def saved_codes(self):
         return open(CACHE_SAVED_PATH).read().split('/$/') if os.path.exists(CACHE_SAVED_PATH) else []
+    @property
+    def viewed_codes(self):
+        return open(CACHE_VIEWD_PATH).read().split('/$/') if os.path.exists(CACHE_VIEWD_PATH) else []
 
 
     def closeEvent(self, event):

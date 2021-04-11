@@ -39,10 +39,11 @@ class Analytics:
 
 
     @staticmethod
-    def getMarkers(df: pd.DataFrame, list_keywords: List[List[str]] = None, saved_cache: List[str] = None) \
-            -> List[Union[Marker, MarkerCluster]]:
+    def getMarkers(df: pd.DataFrame, list_keywords: List[List[str]] = None, saved_cache: List[str] = None,
+                   viewed_codes: List[str] = None)  -> List[Union[Marker, MarkerCluster]]:
         list_keywords = list_keywords if list_keywords is not None else []
         saved_cache = saved_cache if saved_cache is not None else []
+        viewed_codes = viewed_codes if viewed_codes is not None else []
 
         # df_ = df.dropna(subset=['Latitude'])
 
@@ -50,6 +51,8 @@ class Analytics:
         for j, (i, row) in enumerate(df.iterrows()):
             if row['Code'] in saved_cache:
                 color = 'green'
+            elif row['Code'] in viewed_codes:
+                color = 'lightgray'
             else:
                 color = 'blue'
             latitude, lognitude = row['Latitude'], row["Lognitude"]
