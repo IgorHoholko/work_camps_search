@@ -9,7 +9,7 @@
 import pandas as pd
 from typing import Tuple, List, Union
 
-from .util import findKeyWords, renderPopup
+from .util import findKeyWords, renderPopupHTML
 from collections import defaultdict
 from folium.plugins import MarkerCluster
 from folium.map import Marker
@@ -59,9 +59,9 @@ class Analytics:
             if not pd.notna(latitude):
                 continue
             if len(list_keywords):
-                popup = renderPopup(row, list_keywords[j], in_saved=(color=='green'))
+                popup = renderPopupHTML(row, list_keywords[j], in_saved=(color=='green'))
             else:
-                popup = renderPopup(row, in_saved=(color=='green'))
+                popup = renderPopupHTML(row, in_saved=(color=='green'))
             marker_carcase = {"location" :[latitude, lognitude],
                                "popup" : popup,
                                "icon" : folium.Icon(color=color, icon="info", prefix='fa')}

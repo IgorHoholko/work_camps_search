@@ -34,7 +34,7 @@ def findKeyWords(text: str, keywords: List[str]) -> List[str]:
     return keywords_found
 
 
-def renderPopup(df_row, tags: List[str] = None, in_saved: bool = False) -> folium.Popup:
+def renderPopupHTML(df_row, tags: List[str] = None, in_saved: bool = False) -> folium.Popup:
     """ Get pandas row and transform it to folium Popup"""
 
     tags = tags if tags is not None else []
@@ -56,7 +56,12 @@ def renderPopup(df_row, tags: List[str] = None, in_saved: bool = False) -> foliu
     return folium.Popup(html,  max_width=800)
 
 
-def renderProjectsPageHTML(df: pd.DataFrame, tags_list: List[List[str]] = None) -> str:
+def renderProjectsPageHTML(df: pd.DataFrame, tags_list: List[List[str]] = None,
+                           saved_cache: List[str] = None, viewed_codes: List[str] = None) -> str:
+    if tags_list:
+        assert len(df) == len(tags_list)
+    saved_cache = saved_cache if saved_cache is not None else []
+    viewed_codes = viewed_codes if viewed_codes is not None else []
 
     headers = []
     info_dicts = []
@@ -70,6 +75,8 @@ def renderProjectsPageHTML(df: pd.DataFrame, tags_list: List[List[str]] = None) 
         tags = [tag.lower() for tag in tags]
         tags = set(tags)
         info_dict['tags'] = tags
+        info_dict['in_saved'] = row['Code'] in saved_cache
+        info_dict['in_viewed'] = row['Code'] in viewed_codes
 
         headers.append("{}, {}".format(info_dict['Code'], info_dict['Country']))
         info_dicts.append(info_dict)

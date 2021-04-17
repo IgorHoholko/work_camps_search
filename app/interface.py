@@ -25,6 +25,7 @@ import folium
 import pandas as pd
 from .analytics.tools import Analytics
 from .analytics.util import renderProjectsPageHTML
+from .util import SaveCallback
 
 from collections import Counter
 
@@ -44,16 +45,24 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def __init__(self, data: pd.DataFrame = None):
         super(MainWindow, self).__init__()
+        data = data.head()
 
         self._translate = QtCore.QCoreApplication.translate
 
         self.data = data
+        self.current_data = data
+
+        self.markers:               List[Union[Marker, MarkerCluster]] = None
+        self.__callback_output:     str = ''
+        self.keywords_list_found:   List[str] = None
 
         self.setupUi()
         markers = Analytics.getMarkers(data, saved_cache=self.saved_codes, viewed_codes=self.viewed_codes)
         self.resetMap(markers)
         self.resetProjectsPage(data, None)
         self.setupFunctional()
+
+
         
     def setupUi(self):
         self.setObjectName("MainWindow")
@@ -224,9 +233,15 @@ class MainWindow(QtWidgets.QMainWindow):
         self.statusbar = QtWidgets.QStatusBar(self)
         self.statusbar.setObjectName("statusbar")
         self.setStatusBar(self.statusbar)
+
         self.actionFilter = QtWidgets.QAction(self)
         self.actionFilter.setObjectName("actionFilter")
         self.menuFile.addAction(self.actionFilter)
+
+        self.actionRefresh = QtWidgets.QAction(self)
+        self.actionRefresh.setObjectName("actionRefresh")
+        self.menuFile.addAction(self.actionRefresh)
+
         self.menubar.addAction(self.menuFile.menuAction())
 
         self.retranslateUi()
@@ -241,26 +256,46 @@ class MainWindow(QtWidgets.QMainWindow):
         
         self.menuFile.setTitle(self._translate("MainWindow", "File"))
         self.actionFilter.setText(self._translate("MainWindow", "Open Filter"))
+        self.actionRefresh.setText(self._translate("MainWindow", "Refresh"))
 
     def setupFunctional(self):
         self.pushButton_filter_change_status.clicked.connect(self._changeStateMapTabFilter)
         self.actionFilter.triggered.connect(self._changeStateMapTabFilter)
+        self.actionRefresh.triggered.connect(lambda : self._refresh(True))
 
         self.pushButton_filter_apply.clicked.connect(self._onApplyFilter)
 
         self.pushButton_current_projects_save.clicked.connect(self._saveProjectsList)
 
+        self.tab_widget.currentChanged.connect(self._onSwitch2ProjectsTab)
+
     def _saveProjectsList(self):
         path_save, _ = QFileDialog.getSaveFileName(None, caption="Save Projects List",
                                                 filter=" (*.html);;All Files (*)")
-        try:
-            shutil.copy(self.cache_last_saved_projects_page_path, path_save)
-        except:
-            pass
+        if len(path_save):
+            try:
+                current_page = self.projects_table.page()
+                callback = SaveCallback(path_save)
+                current_page.toHtml(callback)
+            except:
+                pass
+
+    def _onSwitch2ProjectsTab(self):
+        # we pressed the button, switched to another tab. Here we get the name of current tab that opened
+        current_widget_name = self.tab_widget.currentWidget().objectName()
+
+        if current_widget_name == 'projects_tab': # we switched from map to projects
+            current_page = self.map_layer.page()
+        elif current_widget_name == 'map_tab': # we switched from projects to map
+            current_page = self.projects_table.page()
+
+        anything_save_changed, _ = self.saveCache(current_page)
+        if anything_save_changed:
+            self._refresh(save_cache=False)
 
 
     def _onApplyFilter(self):
-        self.saveCache()
+        self.saveCache(self.map_layer.page())
 
         key_words_content = self.plainTextEdit_filter_keyWords.toPlainText()
         key_words = key_words_content.split('|')
@@ -271,7 +306,7 @@ class MainWindow(QtWidgets.QMainWindow):
         df = Analytics.selectByTime(self.data, date_from, date_to)
         if df.shape[0]:
             if any([len(word) for word in key_words]):
-                df , keywords_list_found = Analytics.selectByKeywords(df, key_words)
+                df, keywords_list_found = Analytics.selectByKeywords(df, key_words)
             else:
                 keywords_list_found = None
             markers = Analytics.getMarkers(df, keywords_list_found, self.saved_codes, self.viewed_codes)
@@ -279,8 +314,10 @@ class MainWindow(QtWidgets.QMainWindow):
         else:
             markers = []
 
+        self.keywords_list_found = keywords_list_found
         self._changeStateMapTabFilter()
         self.resetMap(markers)
+        self.current_data = df
 
 
     def _changeStateMapTabFilter(self):
@@ -289,7 +326,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def resetMap(self, markers: List[Union[Marker, MarkerCluster]]=None):
         markers = markers if markers is not None else []
         map = folium.Map(location=[50.2577, 14.9939], tiles='Stamen Terrain', zoom_start = 5)
-        print(len(markers))
+
         for i, marker in enumerate(markers):
             marker.add_to(map)
 
@@ -297,59 +334,76 @@ class MainWindow(QtWidgets.QMainWindow):
         map.save(data, close_file=False)
 
         html = data.getvalue().decode()
-        html = html.replace('<body>', '<body>' + open('app/templates/map_cache_injection.html').read(), 1)
-
+        html = html.replace('<body>', '<body>' + open('app/templates/cache_injection.html').read(), 1)
 
         path = os.path.join(TEMP_PATH, "map.html")
         with open(path, 'w', encoding='utf8') as f:
             f.write(html)
 
         self.map_layer.load(QtCore.QUrl.fromLocalFile(path))
+        self.current_markers = markers
 
         data.close()
         
     def resetProjectsPage(self, df: pd.DataFrame, keywords_list: List[List[str]] = None):
-        html = renderProjectsPageHTML(df, keywords_list)
+        html = renderProjectsPageHTML(df, keywords_list, self.saved_codes, self.viewed_codes)
         path = os.path.join(TEMP_PATH, 'projects_page.html')
-        self.cache_last_saved_projects_page_path = path
+
+        html = html.replace('<body>', '<body>' + open('app/templates/cache_injection.html').read(), 1)
+
         with open(path, 'w', encoding='utf8') as f:
             f.write(html)
 
         self.projects_table.load(QtCore.QUrl.fromLocalFile(path))
 
 
-    def saveCache(self):
-        current_page = self.map_layer.page()
+    def saveCache(self, page) -> Tuple[bool, bool]:
+        anything_save_changed = False
+        anything_view_changed = False
 
         # Parse Save Cache ### Async
-        current_page.runJavaScript('document.getElementById("history_save_projects").innerHTML', self.__store_html)
+        page.runJavaScript('document.getElementById("history_save_projects").innerHTML', self.__store_html)
         loop = QtCore.QEventLoop()
         self.toHtmlFinished.connect(loop.quit)
         loop.exec_()
 
-        current_saved = self.saved_codes
-        save_counter = Counter(
-            [*current_saved, *[code.strip() for code in self.__callback_output.split('/$/')]]
-        )
-        need_save = []
-        for code, count in save_counter.items():
-            if count % 2 != 0 and code != '': # One click - save. Two - unsave, ...
-                need_save.append(code)
-        with open(CACHE_SAVED_PATH, 'w') as f:
-            f.write("/$/".join(need_save))
+        if len( self.__callback_output.strip()) != 0:
+            current_saved = self.saved_codes
+            save_counter = Counter(
+                [*current_saved, *[code.strip() for code in self.__callback_output.split('/$/')]]
+            )
+            need_save = []
+            for code, count in save_counter.items():
+                if count % 2 != 0 and code != '': # One click - save. Two - unsave, ...
+                    need_save.append(code)
+            with open(CACHE_SAVED_PATH, 'w') as f:
+                f.write("/$/".join(need_save))
+            anything_save_changed = True
 
 
         # Parse Viewed Cache ### Async
-        current_page.runJavaScript('document.getElementById("history_viewed_projects").innerHTML', self.__store_html)
+        page.runJavaScript('document.getElementById("history_viewed_projects").innerHTML', self.__store_html)
         loop = QtCore.QEventLoop()
         self.toHtmlFinished.connect(loop.quit)
         loop.exec_()
 
-        current_viewed = self.viewed_codes
-        viewed = {*current_viewed, *[code.strip() for code in self.__callback_output.split('/$/')]}
-        with open(CACHE_VIEWD_PATH, 'w') as f:
-            f.write("/$/".join(viewed))
+        if len(self.__callback_output.strip()) != 0:
+            current_viewed = self.viewed_codes
+            viewed = {*current_viewed, *[code.strip() for code in self.__callback_output.split('/$/')]}
+            with open(CACHE_VIEWD_PATH, 'w') as f:
+                f.write("/$/".join(viewed))
+            anything_view_changed = True
 
+        return anything_save_changed, anything_view_changed
+
+    def _refresh(self, save_cache: bool = True):
+        if save_cache:
+            self.saveCache(self.map_layer.page())
+            self.saveCache(self.projects_table.page())
+
+        markers = Analytics.getMarkers(self.current_data, self.keywords_list_found, self.saved_codes, self.viewed_codes)
+        self.resetMap(markers)
+        self.resetProjectsPage(self.current_data)
 
     def __store_html(self, html):
         self.__callback_output = html
@@ -366,7 +420,8 @@ class MainWindow(QtWidgets.QMainWindow):
     def closeEvent(self, event):
         # Destructor
         shutil.rmtree(TEMP_PATH, ignore_errors=True)
-        self.saveCache()
+        self.saveCache(self.map_layer.page())
+        self.saveCache(self.projects_table.page())
         super(MainWindow, self).closeEvent(event)
 
 
