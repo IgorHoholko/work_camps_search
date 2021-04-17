@@ -1,7 +1,7 @@
 # <img src="resources/icon.png" width="40" height="40">work_camps_search
 The application is created to facilitate the search for WorkCamps. 
 
-[E-vet workcamps page](https://www.e-vet.org/fo/html5/index.cfm?e04=250735&qs=style2&dil=eng) provides more than 1000 projects (for Belarus people). But it is provided in list format with no save possibility, no keywords search, no location provided on map.
+[E-vet workcamps page](https://www.e-vet.org/fo/html5/index.cfm?e04=250735&qs=style2&dil=eng) provides more than 1000 projects (for Belarus people). But They are provided in a list format with no save possibility, no keywords search, no location provided on map.
 
 App's scope:
   - **Parse projects** from link above.
