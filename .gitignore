@@ -4,6 +4,7 @@ app/TEMP
 .idea
 .bash_history
 .python_history
+app/_cache
 
 
 # Byte-compiled / optimized / DLL files
